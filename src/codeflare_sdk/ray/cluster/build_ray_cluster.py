@@ -94,7 +94,7 @@ VOLUMES = [
 
 SUPPORTED_PYTHON_VERSIONS = {
     "3.9": "quay.io/modh/ray@sha256:0d715f92570a2997381b7cafc0e224cfa25323f18b9545acfd23bc2b71576d06",
-    "3.11": "quay.io/modh/ray@sha256:db667df1bc437a7b0965e8031e905d3ab04b86390d764d120e05ea5a5c18d1b4",
+    "3.11": "quay.io/modh/ray@sha256:0a8cce41022a162969b15d983d04abe835e351dc90ccd2285e9208b1845a0103",
 }
 
 
