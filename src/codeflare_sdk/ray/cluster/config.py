@@ -38,6 +38,41 @@ DEFAULT_RESOURCE_MAPPING = {
     "huawei.com/Ascend310": "NPU",
 }
 
+RESOURCE_TEMPLATES = {
+    "small": {
+        "head_cpu_requests": "500m",
+        "head_cpu_limits": "500m", 
+        "head_memory_requests": 4,
+        "head_memory_limits": 4,
+        "num_workers": 2,
+        "worker_cpu_requests": "250m",
+        "worker_cpu_limits": 1,
+        "worker_memory_requests": 4,
+        "worker_memory_limits": 4,
+    },
+    "medium": {
+        "head_cpu_requests": "750m",
+        "head_cpu_limits": "750m",
+        "head_memory_requests": 6, 
+        "head_memory_limits": 6,
+        "num_workers": 4,
+        "worker_cpu_requests": "500m",
+        "worker_cpu_limits": 2,
+        "worker_memory_requests": 4,
+        "worker_memory_limits": 4,
+    },
+    "large": {
+        "head_cpu_requests": "1000m",
+        "head_cpu_limits": "1000m",
+        "head_memory_requests": 8,
+        "head_memory_limits": 8, 
+        "num_workers": 6,
+        "worker_cpu_requests": "1000m",
+        "worker_cpu_limits": 4,
+        "worker_memory_requests": 6,
+        "worker_memory_limits": 6,
+    }
+}
 
 @dataclass
 class ClusterConfiguration:
@@ -98,6 +133,9 @@ class ClusterConfiguration:
             Kubernetes secret reference containing Redis password. ex: {"name": "secret-name", "key": "password-key"}
         external_storage_namespace:
             The storage namespace to use for GCS fault tolerance. By default, KubeRay sets it to the UID of RayCluster.
+        resource_template:
+            A string representing the resource template to use for the cluster. This can be used to customize
+            the resource allocation for the cluster on a higher level using set templates.
     """
 
     name: str
@@ -139,6 +177,7 @@ class ClusterConfiguration:
     redis_address: Optional[str] = None
     redis_password_secret: Optional[Dict[str, str]] = None
     external_storage_namespace: Optional[str] = None
+    resource_template: Optional[str] = None
 
     def __post_init__(self):
         if not self.verify_tls:
@@ -173,6 +212,7 @@ class ClusterConfiguration:
                 )
 
         self._validate_types()
+        self._set_resource_template()
         self._memory_to_resource()
         self._memory_to_string()
         self._str_mem_no_unit_add_GB()
@@ -257,6 +297,7 @@ class ClusterConfiguration:
 
         if errors:
             raise TypeError("Type validation failed:\n" + "\n".join(errors))
+             
 
     @staticmethod
     def _is_type(value, expected_type):
@@ -289,3 +330,15 @@ class ClusterConfiguration:
             return isinstance(value, expected_type)
 
         return check_type(value, expected_type)
+
+
+    def _set_resource_template(self):
+        """Set the resource template for the cluster configuration."""
+        if self.resource_template == "default":
+            # Default template is not set, so we don't need to set it (this allows user input to pass through)
+            self.resource_template = None
+        elif self.resource_template in RESOURCE_TEMPLATES:
+            # Set the resource template for the cluster configuration if it is a valid template
+            template = RESOURCE_TEMPLATES[self.resource_template]
+            for key, value in template.items():
+                setattr(self, key, value)

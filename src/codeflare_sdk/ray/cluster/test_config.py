@@ -241,6 +241,58 @@ def test_ray_usage_stats_enabled(mocker):
     ][0]
     env_vars = {env["name"]: env["value"] for env in head_container["env"]}
     assert env_vars["RAY_USAGE_STATS_ENABLED"] == "1"
+    
+    
+def test_cluster_resource_template(mocker):
+    # Test each resource template configuration
+    for template_size, name, expected_values in [
+        ("small", "test-small", {
+            "head_cpu_requests": "500m",
+            "head_cpu_limits": "500m",
+            "head_memory_requests": "4G",
+            "head_memory_limits": "4G",
+            "num_workers": 2,
+            "worker_cpu_requests": "250m",
+            "worker_cpu_limits": 1,
+            "worker_memory_requests": "4G",
+            "worker_memory_limits": "4G",
+        }),
+        ("medium", "test-medium", {
+            "head_cpu_requests": "750m",
+            "head_cpu_limits": "750m",
+            "head_memory_requests": "6G",
+            "head_memory_limits": "6G",
+            "num_workers": 4,
+            "worker_cpu_requests": "500m",
+            "worker_cpu_limits": 2,
+            "worker_memory_requests": "4G",
+            "worker_memory_limits": "4G",
+        }),
+        ("large", "test-large", {
+            "head_cpu_requests": "1000m",
+            "head_cpu_limits": "1000m",
+            "head_memory_requests": "8G",
+            "head_memory_limits": "8G",
+            "num_workers": 6,
+            "worker_cpu_requests": "1000m",
+            "worker_cpu_limits": 4,
+            "worker_memory_requests": "6G",
+            "worker_memory_limits": "6G",
+        })
+    ]:
+        # Create configuration with template
+        config = ClusterConfiguration(
+            name=name,
+            resource_template=template_size
+        )
+        
+        # Verify template was set correctly
+        assert config.resource_template == template_size
+        
+        # Verify all resource values match expected
+        for key, value in expected_values.items():
+            actual = getattr(config, key)
+            assert actual == value, f"{template_size} template: expected {key}={value}, got {actual}"
 
 
 # Make sure to always keep this function last
