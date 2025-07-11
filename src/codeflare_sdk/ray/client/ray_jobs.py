@@ -109,6 +109,8 @@ class RayJobClient:
             str:
                 The unique identifier for the submitted job.
         """
+        print("DeprecationWarning: The Ray Job Client is deprecated and will be removed in a future release.")
+        
         return self.rayJobClient.submit_job(
             entrypoint=entrypoint,
             job_id=job_id,
