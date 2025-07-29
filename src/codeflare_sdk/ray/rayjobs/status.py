@@ -27,8 +27,9 @@ class RayJobDeploymentStatus(Enum):
     """
     Defines the possible deployment states of a Ray job (from the KubeRay RayJob API).
     """
+
     COMPLETE = "Complete"
-    RUNNING = "Running" 
+    RUNNING = "Running"
     FAILED = "Failed"
     SUSPENDED = "Suspended"
     UNKNOWN = "Unknown"
@@ -38,6 +39,7 @@ class CodeflareRayJobStatus(Enum):
     """
     Defines the possible reportable states of a CodeFlare Ray job.
     """
+
     COMPLETE = 1
     RUNNING = 2
     FAILED = 3
@@ -50,6 +52,7 @@ class RayJobInfo:
     """
     For storing information about a Ray job.
     """
+
     name: str
     job_id: str
     status: RayJobDeploymentStatus
@@ -59,4 +62,3 @@ class RayJobInfo:
     end_time: Optional[str] = None
     failed_attempts: int = 0
     succeeded_attempts: int = 0
-    dashboard_url: Optional[str] = None 
