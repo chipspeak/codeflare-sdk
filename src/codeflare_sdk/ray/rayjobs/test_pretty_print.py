@@ -29,22 +29,22 @@ def test_get_status_display():
     display, color = _get_status_display(RayJobDeploymentStatus.COMPLETE)
     assert display == "Complete :white_heavy_check_mark:"
     assert color == "[white on green][bold]Name"
-    
+
     # Test Running status
     display, color = _get_status_display(RayJobDeploymentStatus.RUNNING)
     assert display == "Running :gear:"
     assert color == "[white on blue][bold]Name"
-    
+
     # Test Failed status
     display, color = _get_status_display(RayJobDeploymentStatus.FAILED)
     assert display == "Failed :x:"
     assert color == "[white on red][bold]Name"
-    
+
     # Test Suspended status
     display, color = _get_status_display(RayJobDeploymentStatus.SUSPENDED)
     assert display == "Suspended :pause_button:"
     assert color == "[white on yellow][bold]Name"
-    
+
     # Test Unknown status
     display, color = _get_status_display(RayJobDeploymentStatus.UNKNOWN)
     assert display == "Unknown :question:"
@@ -60,15 +60,17 @@ def test_print_job_status_running_format(mocker):
     mock_inner_table = MagicMock()
     mock_main_table = MagicMock()
     mock_panel = MagicMock()
-    
+
     # Mock Table to return different instances for inner and main tables
     table_instances = [mock_inner_table, mock_main_table]
     mock_table_class = MagicMock(side_effect=table_instances)
-    
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Console', return_value=mock_console)
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Table', mock_table_class)
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Panel', mock_panel)
-    
+
+    mocker.patch(
+        "codeflare_sdk.ray.rayjobs.pretty_print.Console", return_value=mock_console
+    )
+    mocker.patch("codeflare_sdk.ray.rayjobs.pretty_print.Table", mock_table_class)
+    mocker.patch("codeflare_sdk.ray.rayjobs.pretty_print.Panel", mock_panel)
+
     # Create test job info for running job
     job_info = RayJobInfo(
         name="test-job",
@@ -78,38 +80,43 @@ def test_print_job_status_running_format(mocker):
         cluster_name="test-cluster",
         start_time="2025-07-28T11:37:07Z",
         failed_attempts=0,
-        succeeded_attempts=0
+        succeeded_attempts=0,
     )
-    
+
     # Call the function
     print_job_status(job_info)
-    
+
     # Verify both Table calls
     expected_table_calls = [
         call(box=None, show_header=False),  # Inner content table
-        call(box=None, title="[bold] :package: CodeFlare RayJob Status :package:")  # Main wrapper table
+        call(
+            box=None, title="[bold] :package: CodeFlare RayJob Status :package:"
+        ),  # Main wrapper table
     ]
     mock_table_class.assert_has_calls(expected_table_calls)
-    
+
     # Verify inner table rows are added in correct order and format (versus our hard-coded version of this for cluster)
     expected_calls = [
         call("[white on blue][bold]Name"),  # Header with blue color for running
-        call("[bold underline]test-job", "Running :gear:"),  # Name and status with gear emoji
+        call(
+            "[bold underline]test-job", "Running :gear:"
+        ),  # Name and status with gear emoji
         call(),  # Empty separator row
         call("[bold]Job ID:[/bold] test-job-abc123"),
         call("[bold]Status:[/bold] Running"),
         call("[bold]RayCluster:[/bold] test-cluster"),
         call("[bold]Namespace:[/bold] test-ns"),
+        call(),  # Empty row before timing info
         call("[bold]Started:[/bold] 2025-07-28T11:37:07Z"),
     ]
     mock_inner_table.add_row.assert_has_calls(expected_calls)
-    
+
     # Verify Panel is created with inner table
     mock_panel.fit.assert_called_once_with(mock_inner_table)
-    
+
     # Verify main table gets the panel
     mock_main_table.add_row.assert_called_once_with(mock_panel.fit.return_value)
-    
+
     # Verify console prints the main table
     mock_console.print.assert_called_once_with(mock_main_table)
 
@@ -123,15 +130,17 @@ def test_print_job_status_complete_format(mocker):
     mock_inner_table = MagicMock()
     mock_main_table = MagicMock()
     mock_panel = MagicMock()
-    
+
     # Mock Table to return different instances
     table_instances = [mock_inner_table, mock_main_table]
     mock_table_class = MagicMock(side_effect=table_instances)
-    
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Console', return_value=mock_console)
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Table', mock_table_class)
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Panel', mock_panel)
-    
+
+    mocker.patch(
+        "codeflare_sdk.ray.rayjobs.pretty_print.Console", return_value=mock_console
+    )
+    mocker.patch("codeflare_sdk.ray.rayjobs.pretty_print.Table", mock_table_class)
+    mocker.patch("codeflare_sdk.ray.rayjobs.pretty_print.Panel", mock_panel)
+
     # Create test job info for completed job
     job_info = RayJobInfo(
         name="completed-job",
@@ -141,21 +150,24 @@ def test_print_job_status_complete_format(mocker):
         cluster_name="prod-cluster",
         start_time="2025-07-28T11:37:07Z",
         failed_attempts=0,
-        succeeded_attempts=1
+        succeeded_attempts=1,
     )
-    
+
     # Call the function
     print_job_status(job_info)
-    
+
     # Verify correct header color for completed job (green) (versus our hard-coded version of this for cluster)
     expected_calls = [
         call("[white on green][bold]Name"),  # Green header for complete
-        call("[bold underline]completed-job", "Complete :white_heavy_check_mark:"),  # Checkmark emoji
+        call(
+            "[bold underline]completed-job", "Complete :white_heavy_check_mark:"
+        ),  # Checkmark emoji
         call(),  # Empty separator
         call("[bold]Job ID:[/bold] completed-job-xyz789"),
         call("[bold]Status:[/bold] Complete"),
         call("[bold]RayCluster:[/bold] prod-cluster"),
         call("[bold]Namespace:[/bold] prod-ns"),
+        call(),  # Empty row before timing info
         call("[bold]Started:[/bold] 2025-07-28T11:37:07Z"),
     ]
     mock_inner_table.add_row.assert_has_calls(expected_calls)
@@ -170,15 +182,17 @@ def test_print_job_status_failed_with_attempts_format(mocker):
     mock_inner_table = MagicMock()
     mock_main_table = MagicMock()
     mock_panel = MagicMock()
-    
+
     # Mock Table to return different instances
     table_instances = [mock_inner_table, mock_main_table]
     mock_table_class = MagicMock(side_effect=table_instances)
-    
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Console', return_value=mock_console)
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Table', mock_table_class)
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Panel', mock_panel)
-    
+
+    mocker.patch(
+        "codeflare_sdk.ray.rayjobs.pretty_print.Console", return_value=mock_console
+    )
+    mocker.patch("codeflare_sdk.ray.rayjobs.pretty_print.Table", mock_table_class)
+    mocker.patch("codeflare_sdk.ray.rayjobs.pretty_print.Panel", mock_panel)
+
     # Create test job info with failures
     job_info = RayJobInfo(
         name="failing-job",
@@ -188,12 +202,12 @@ def test_print_job_status_failed_with_attempts_format(mocker):
         cluster_name="test-cluster",
         start_time="2025-07-28T11:37:07Z",
         failed_attempts=3,  # Has failures
-        succeeded_attempts=0
+        succeeded_attempts=0,
     )
-    
+
     # Call the function
     print_job_status(job_info)
-    
+
     # Verify correct formatting including failure attempts (versus our hard-coded version of this for cluster)
     expected_calls = [
         call("[white on red][bold]Name"),  # Red header for failed
@@ -203,6 +217,7 @@ def test_print_job_status_failed_with_attempts_format(mocker):
         call("[bold]Status:[/bold] Failed"),
         call("[bold]RayCluster:[/bold] test-cluster"),
         call("[bold]Namespace:[/bold] test-ns"),
+        call(),  # Empty row before timing info
         call("[bold]Started:[/bold] 2025-07-28T11:37:07Z"),
         call("[bold]Failed Attempts:[/bold] 3"),  # Failed attempts should be shown
     ]
@@ -218,22 +233,26 @@ def test_print_no_job_found_format(mocker):
     mock_inner_table = MagicMock()
     mock_main_table = MagicMock()
     mock_panel = MagicMock()
-    
+
     # Mock Table to return different instances
     table_instances = [mock_inner_table, mock_main_table]
     mock_table_class = MagicMock(side_effect=table_instances)
-    
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Console', return_value=mock_console)
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Table', mock_table_class)
-    mocker.patch('codeflare_sdk.ray.rayjobs.pretty_print.Panel', mock_panel)
-    
+
+    mocker.patch(
+        "codeflare_sdk.ray.rayjobs.pretty_print.Console", return_value=mock_console
+    )
+    mocker.patch("codeflare_sdk.ray.rayjobs.pretty_print.Table", mock_table_class)
+    mocker.patch("codeflare_sdk.ray.rayjobs.pretty_print.Panel", mock_panel)
+
     # Call the function
     print_no_job_found("missing-job", "test-namespace")
-    
+
     # Verify error message format (versus our hard-coded version of this for cluster)
     expected_calls = [
         call("[white on red][bold]Name"),  # Red header for error
-        call("[bold underline]missing-job", "[bold red]No RayJob found"),  # Error message in red
+        call(
+            "[bold underline]missing-job", "[bold red]No RayJob found"
+        ),  # Error message in red
         call(),  # Empty separator
         call(),  # Another empty row
         call("Have you run rayjob.submit() yet?"),  # Helpful hint
@@ -241,6 +260,6 @@ def test_print_no_job_found_format(mocker):
         call("[bold]Namespace:[/bold] test-namespace"),
     ]
     mock_inner_table.add_row.assert_has_calls(expected_calls)
-    
+
     # Verify Panel is used
-    mock_panel.fit.assert_called_once_with(mock_inner_table) 
+    mock_panel.fit.assert_called_once_with(mock_inner_table)

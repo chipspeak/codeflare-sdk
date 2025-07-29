@@ -13,8 +13,9 @@
 # limitations under the License.
 
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from codeflare_sdk.ray.rayjobs.rayjob import RayJob
+from codeflare_sdk.ray.cluster.config import ClusterConfiguration
 
 
 def test_rayjob_submit_success(mocker):
@@ -86,3 +87,225 @@ def test_rayjob_submit_failure(mocker):
     # Test that RuntimeError is raised on failure
     with pytest.raises(RuntimeError, match="Failed to submit RayJob test-rayjob"):
         rayjob.submit()
+
+
+def test_rayjob_init_validation_both_provided():
+    """Test that providing both cluster_name and cluster_config raises error."""
+    cluster_config = ClusterConfiguration(name="test-cluster", namespace="test")
+
+    with pytest.raises(
+        ValueError, match="Cannot specify both cluster_name and cluster_config"
+    ):
+        RayJob(
+            job_name="test-job",
+            cluster_name="existing-cluster",
+            cluster_config=cluster_config,
+            entrypoint="python script.py",
+        )
+
+
+def test_rayjob_init_validation_neither_provided():
+    """Test that providing neither cluster_name nor cluster_config raises error."""
+    with pytest.raises(
+        ValueError, match="Either cluster_name or cluster_config must be provided"
+    ):
+        RayJob(job_name="test-job", entrypoint="python script.py")
+
+
+def test_rayjob_init_with_cluster_config():
+    """Test RayJob initialization with cluster configuration for auto-creation."""
+    cluster_config = ClusterConfiguration(
+        name="auto-cluster", namespace="test-namespace", num_workers=2
+    )
+
+    rayjob = RayJob(
+        job_name="test-job",
+        cluster_config=cluster_config,
+        entrypoint="python script.py",
+    )
+
+    assert rayjob.name == "test-job"
+    assert rayjob.cluster_name == "auto-cluster"
+    assert rayjob._cluster_config == cluster_config
+    assert rayjob._cluster_name is None
+
+
+def test_rayjob_cluster_name_generation():
+    """Test that cluster names are generated when config has empty name."""
+    cluster_config = ClusterConfiguration(
+        name="",  # Empty name should trigger generation
+        namespace="test-namespace",
+        num_workers=1,
+    )
+
+    rayjob = RayJob(
+        job_name="my-job", cluster_config=cluster_config, entrypoint="python script.py"
+    )
+
+    assert rayjob.cluster_name == "my-job-cluster"
+    assert cluster_config.name == "my-job-cluster"  # Should be updated
+
+
+@patch("codeflare_sdk.ray.rayjobs.rayjob.build_ray_cluster")
+def test_build_ray_cluster_spec(mock_build_ray_cluster, mocker):
+    """Test _build_ray_cluster_spec method."""
+    mocker.patch("kubernetes.config.load_kube_config")
+
+    mock_ray_cluster = {
+        "apiVersion": "ray.io/v1",
+        "kind": "RayCluster",
+        "metadata": {"name": "test-cluster", "namespace": "test"},
+        "spec": {
+            "rayVersion": "2.9.0",
+            "headGroupSpec": {"replicas": 1},
+            "workerGroupSpecs": [{"replicas": 2}],
+        },
+    }
+    mock_build_ray_cluster.return_value = mock_ray_cluster
+
+    cluster_config = ClusterConfiguration(
+        name="test-cluster", namespace="test", num_workers=2
+    )
+
+    rayjob = RayJob(
+        job_name="test-job",
+        cluster_config=cluster_config,
+        entrypoint="python script.py",
+    )
+
+    spec = rayjob._build_ray_cluster_spec()
+
+    # Should return only the spec part, not metadata
+    assert spec == mock_ray_cluster["spec"]
+    assert "metadata" not in spec
+
+    # Verify build_ray_cluster was called with correct parameters
+    mock_build_ray_cluster.assert_called_once()
+    call_args = mock_build_ray_cluster.call_args[0][0]
+    assert call_args.config.appwrapper is False
+    assert call_args.config.write_to_file is False
+
+
+def test_build_rayjob_cr_with_existing_cluster(mocker):
+    """Test _build_rayjob_cr method with existing cluster."""
+    mocker.patch("kubernetes.config.load_kube_config")
+
+    rayjob = RayJob(
+        job_name="test-job",
+        cluster_name="existing-cluster",
+        namespace="test-namespace",
+        entrypoint="python main.py",
+        shutdown_after_job_finishes=False,
+        ttl_seconds_after_finished=300,
+    )
+
+    rayjob_cr = rayjob._build_rayjob_cr()
+
+    # Check basic structure
+    assert rayjob_cr["apiVersion"] == "ray.io/v1"
+    assert rayjob_cr["kind"] == "RayJob"
+    assert rayjob_cr["metadata"]["name"] == "test-job"
+
+    # Check lifecycle parameters
+    spec = rayjob_cr["spec"]
+    assert spec["entrypoint"] == "python main.py"
+    assert spec["shutdownAfterJobFinishes"] is False
+    assert spec["ttlSecondsAfterFinished"] == 300
+
+    # Should use clusterSelector for existing cluster
+    assert spec["clusterSelector"]["ray.io/cluster"] == "existing-cluster"
+    assert "rayClusterSpec" not in spec
+
+
+@patch("codeflare_sdk.ray.rayjobs.rayjob.build_ray_cluster")
+def test_build_rayjob_cr_with_auto_cluster(mock_build_ray_cluster, mocker):
+    """Test _build_rayjob_cr method with auto-created cluster."""
+    mocker.patch("kubernetes.config.load_kube_config")
+
+    mock_ray_cluster = {
+        "apiVersion": "ray.io/v1",
+        "kind": "RayCluster",
+        "metadata": {"name": "auto-cluster", "namespace": "test"},
+        "spec": {
+            "rayVersion": "2.9.0",
+            "headGroupSpec": {"replicas": 1},
+            "workerGroupSpecs": [{"replicas": 2}],
+        },
+    }
+    mock_build_ray_cluster.return_value = mock_ray_cluster
+
+    cluster_config = ClusterConfiguration(
+        name="auto-cluster", namespace="test-namespace", num_workers=2
+    )
+
+    rayjob = RayJob(
+        job_name="test-job", cluster_config=cluster_config, entrypoint="python main.py"
+    )
+
+    rayjob_cr = rayjob._build_rayjob_cr()
+
+    # Should use rayClusterSpec for auto-created cluster
+    assert rayjob_cr["spec"]["rayClusterSpec"] == mock_ray_cluster["spec"]
+    assert "clusterSelector" not in rayjob_cr["spec"]
+
+
+def test_submit_validation_no_entrypoint(mocker):
+    """Test that submit() raises error when entrypoint is None."""
+    mocker.patch("kubernetes.config.load_kube_config")
+    mocker.patch("codeflare_sdk.ray.rayjobs.rayjob.RayjobApi")
+
+    rayjob = RayJob(
+        job_name="test-job",
+        cluster_name="test-cluster",
+        entrypoint=None,  # No entrypoint provided
+    )
+
+    with pytest.raises(
+        ValueError, match="entrypoint must be provided to submit a RayJob"
+    ):
+        rayjob.submit()
+
+
+@patch("codeflare_sdk.ray.rayjobs.rayjob.build_ray_cluster")
+def test_submit_with_auto_cluster(mock_build_ray_cluster, mocker):
+    """Test successful submission with auto-created cluster."""
+    mocker.patch("kubernetes.config.load_kube_config")
+
+    mock_ray_cluster = {
+        "apiVersion": "ray.io/v1",
+        "kind": "RayCluster",
+        "spec": {
+            "rayVersion": "2.9.0",
+            "headGroupSpec": {"replicas": 1},
+            "workerGroupSpecs": [{"replicas": 1}],
+        },
+    }
+    mock_build_ray_cluster.return_value = mock_ray_cluster
+
+    # Mock the RayjobApi
+    mock_api_class = mocker.patch("codeflare_sdk.ray.rayjobs.rayjob.RayjobApi")
+    mock_api_instance = MagicMock()
+    mock_api_class.return_value = mock_api_instance
+    mock_api_instance.submit_job.return_value = True
+
+    cluster_config = ClusterConfiguration(
+        name="auto-cluster", namespace="test", num_workers=1
+    )
+
+    rayjob = RayJob(
+        job_name="test-job",
+        cluster_config=cluster_config,
+        entrypoint="python script.py",
+    )
+
+    result = rayjob.submit()
+
+    assert result == "test-job"
+
+    # Verify the correct RayJob CR was submitted
+    mock_api_instance.submit_job.assert_called_once()
+    call_args = mock_api_instance.submit_job.call_args
+
+    job_cr = call_args.kwargs["job"]
+    assert "rayClusterSpec" in job_cr["spec"]
+    assert job_cr["spec"]["rayClusterSpec"] == mock_ray_cluster["spec"]
