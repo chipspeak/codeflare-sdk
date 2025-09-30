@@ -4,6 +4,8 @@ Tests for the simplified ManagedClusterConfig accelerator_configs behavior.
 
 import pytest
 from codeflare_sdk.ray.rayjobs.config import ManagedClusterConfig, DEFAULT_ACCELERATORS
+from kubernetes.client import V1VolumeMount
+from kubernetes.client import V1Volume, V1ConfigMapVolumeSource
 
 
 def test_accelerator_configs_defaults_to_default_accelerators():
@@ -167,63 +169,61 @@ def test_ray_usage_stats_with_other_user_envs():
     assert len(config.envs) == 3
 
 
-def test_add_script_volumes_existing_volume_early_return():
-    """Test add_script_volumes early return when volume already exists."""
-    from kubernetes.client import V1Volume, V1ConfigMapVolumeSource
+def test_add_file_volumes_existing_volume_early_return():
+    """Test add_file_volumes early return when volume already exists."""
 
     config = ManagedClusterConfig()
 
     # Pre-add a volume with same name
     existing_volume = V1Volume(
-        name="ray-job-scripts",
-        config_map=V1ConfigMapVolumeSource(name="existing-scripts"),
+        name="ray-job-files",
+        config_map=V1ConfigMapVolumeSource(name="existing-files"),
     )
     config.volumes.append(existing_volume)
 
     # Should return early and not add duplicate
-    config.add_script_volumes(configmap_name="new-scripts")
+    config.add_file_volumes(configmap_name="new-files")
 
     # Should still have only one volume, no mount added
     assert len(config.volumes) == 1
     assert len(config.volume_mounts) == 0
 
 
-def test_add_script_volumes_existing_mount_early_return():
-    """Test add_script_volumes early return when mount already exists."""
-    from kubernetes.client import V1VolumeMount
+def test_add_file_volumes_existing_mount_early_return():
+    """Test add_file_volumes early return when mount already exists."""
 
     config = ManagedClusterConfig()
 
     # Pre-add a mount with same name
-    existing_mount = V1VolumeMount(name="ray-job-scripts", mount_path="/existing/path")
+    existing_mount = V1VolumeMount(name="ray-job-files", mount_path="/existing/path")
     config.volume_mounts.append(existing_mount)
 
     # Should return early and not add duplicate
-    config.add_script_volumes(configmap_name="new-scripts")
+    config.add_file_volumes(configmap_name="new-files")
 
     # Should still have only one mount, no volume added
     assert len(config.volumes) == 0
     assert len(config.volume_mounts) == 1
 
 
-def test_build_script_configmap_spec_labels():
-    """Test that build_script_configmap_spec creates ConfigMap with correct labels."""
+def test_build_file_configmap_spec_labels():
+    """Test that build_file_configmap_spec creates ConfigMap with correct labels."""
     config = ManagedClusterConfig()
 
     job_name = "test-job"
     namespace = "test-namespace"
-    scripts = {"script.py": "print('hello')", "helper.py": "# helper code"}
+    files = {"test.py": "print('hello')", "helper.py": "# helper code"}
 
-    configmap_spec = config.build_script_configmap_spec(job_name, namespace, scripts)
+    configmap_spec = config.build_file_configmap_spec(job_name, namespace, files)
 
     assert configmap_spec["apiVersion"] == "v1"
     assert configmap_spec["kind"] == "ConfigMap"
-    assert configmap_spec["metadata"]["name"] == f"{job_name}-scripts"
+    assert configmap_spec["metadata"]["name"] == f"{job_name}-files"
     assert configmap_spec["metadata"]["namespace"] == namespace
 
     labels = configmap_spec["metadata"]["labels"]
     assert labels["ray.io/job-name"] == job_name
     assert labels["app.kubernetes.io/managed-by"] == "codeflare-sdk"
-    assert labels["app.kubernetes.io/component"] == "rayjob-scripts"
+    assert labels["app.kubernetes.io/component"] == "rayjob-files"
 
-    assert configmap_spec["data"] == scripts
+    assert configmap_spec["data"] == files
