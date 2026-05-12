@@ -62,7 +62,7 @@ def train_func_distributed():
         print(f"epoch: {epoch}, loss: {loss.item()}")
 
 
-# For GPU Training, set `use_gpu` to True.
+# For GPU Training, include "GPU": 1 in resources_per_worker.
 use_gpu = True
 
 # To learn more about configuring S3 compatible storage check out our docs -> https://github.com/project-codeflare/codeflare-sdk/blob/main/docs/s3-compatible-storage.md
@@ -70,10 +70,11 @@ trainer = TorchTrainer(
     train_func_distributed,
     scaling_config=ScalingConfig(
         # num_workers = number of worker nodes with the ray head node included
-        num_workers=3,
+        num_workers=2,
         use_gpu=use_gpu,
         resources_per_worker={
             "CPU": 1,
+            **({"GPU": 1} if use_gpu else {}),
         },
     ),
 )
